@@ -12,8 +12,7 @@ public class DocumentVerification
     {
         client = new HttpClient
         {
-            BaseAddress = new Uri(endpoint),
-            Timeout = TimeSpan.FromSeconds(1)
+            BaseAddress = new Uri(endpoint)
         };
         client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36");
     }
@@ -37,7 +36,7 @@ public class DocumentVerification
         }
     }
 
-    public async Task<string> SendFormAsync(string token, string barkod)
+    public async Task<bool> SendFormAsync(string token, string barkod)
     {
         try
         {
@@ -51,27 +50,24 @@ public class DocumentVerification
             response.EnsureSuccessStatusCode();
             var responseBody = await response.Content.ReadAsStringAsync();
 
-            // Yanıtı kontrol et
-            if (responseBody.Contains("/belge-dogrulama?islem=dogrulama&submit"))
-            {
-                return "TC Girme aşamasına geçildi.";
-            }
-            else
-            {
-                return "Girilen barkod numarası e-Devlet Kapısında tanımlı değildir.";
-            }
+            return responseBody.Contains("/belge-dogrulama?islem=dogrulama&submit");
         }
         catch (HttpRequestException e)
         {
             Console.WriteLine($"Bağlantı hatası: {e.Message}");
-            return null;
+            return false;
         }
     }
 
-    public async Task<string> SendTcKimlikFormAsync(string tcKimlik, string barkod, string token)
+    public async Task<bool> SendTcKimlikFormAsync(string tcKimlik, string barkod, string token)
     {
         try
         {
+            if (!IsValidTcKimlikNo(tcKimlik))
+            {
+                return false;
+            }
+
             string url = $"/belge-dogrulama?islem=dogrulama&submit&barkod={barkod}";
             var formData = new MultipartFormDataContent
             {
@@ -82,13 +78,12 @@ public class DocumentVerification
             response.EnsureSuccessStatusCode();
             var responseBody = await response.Content.ReadAsStringAsync();
 
-            // Yanıtı kontrol et
-            return responseBody.Contains(tcKimlik) ? "TC Kimlik numarası doğrulaması basarili." : "TC Kimlik numarası doğrulaması başarısız.";
+            return !responseBody.Contains("fieldError");
         }
         catch (HttpRequestException e)
         {
             Console.WriteLine($"Bağlantı hatası: {e.Message}");
-            return null;
+            return false;
         }
     }
 
@@ -188,11 +183,15 @@ public class DocumentVerification
         return match.Success ? match.Groups[1].Value.Trim() : null;
     }
 
-
-
     private string ExtractToken(string html)
     {
         var match = Regex.Match(html, @"data-token=""(.+?)""");
         return match.Success ? match.Groups[1].Value : null;
     }
+
+    private bool IsValidTcKimlikNo(string tcKimlikNo)
+    {
+        return Regex.IsMatch(tcKimlikNo, @"^[1-9]\d{9}[02468]$");
+    }
+
 }

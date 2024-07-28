@@ -7,41 +7,49 @@
     {
         var dogrulama = new DocumentVerification();
         var token = await dogrulama.GetTokenAsync();
-        string tcResponse = String.Empty;
+        var tcResponse = false;
 
-        if (!string.IsNullOrEmpty(token))
-        {
-            Console.WriteLine("Barkod Numarası:");
-            string barkod = Console.ReadLine(); // Kullanmak istediğiniz barkod numarasını girin
-            string response = await dogrulama.SendFormAsync(token, barkod);
-            Console.WriteLine(response);
-
-            if (response == "TC Girme aşamasına geçildi.")
-            {
-                Console.WriteLine("Tc:");
-                string tcKimlik = Console.ReadLine(); // Kullanmak istediğiniz TC Kimlik Numarasını girin
-                tcResponse = await dogrulama.SendTcKimlikFormAsync(tcKimlik, barkod, token);
-                Console.WriteLine(tcResponse);
-            }
-
-            if(tcResponse == "TC Kimlik numarası doğrulaması basarili.")
-            {
-                var finalResponse = await dogrulama.SendOnayFormAsync(token);
-                if(finalResponse)
-                {
-                    Console.WriteLine("pdf bulundu");
-                    await dogrulama.GetPdfUrl(token);
-                }
-                else
-                {
-                    Console.WriteLine("pdf bulunamadi");
-                }
-            }
-            
-        }
-        else
+        if (string.IsNullOrEmpty(token))
         {
             Console.WriteLine("Token alınamadı.");
+            Console.ReadLine();
+            return;
         }
+
+        Console.Write("Barkod Numarası:");
+        string barkod = Console.ReadLine(); // Kullanmak istediğiniz barkod numarasını girin
+        var response = await dogrulama.SendFormAsync(token, barkod);
+
+        if (!response)
+        {
+            Console.WriteLine("Girilen barkod numarası e-Devlet Kapısında tanımlı değildir.");
+            Console.ReadLine();
+            return;
+        }
+
+        Console.Write("Tc:");
+        string tcKimlik = Console.ReadLine(); // Kullanmak istediğiniz TC Kimlik Numarasını girin
+        tcResponse = await dogrulama.SendTcKimlikFormAsync(tcKimlik, barkod, token);
+
+        if (!tcResponse)
+        {
+            Console.WriteLine("TC Kimlik numarası doğrulaması başarısız.");
+            Console.ReadLine();
+            return;
+        }
+
+        Console.WriteLine("TC Kimlik numarası doğrulaması başarılı.");
+
+        var finalResponse = await dogrulama.SendOnayFormAsync(token);
+        if (!finalResponse)
+        {
+            Console.WriteLine("Öğrenci belgesi bulunamadı");
+            Console.ReadLine();
+            return;
+        }
+
+        Console.WriteLine("Öğrenci belgesi bulundu.");
+        await dogrulama.GetPdfUrl(token);
+        Console.ReadLine();
     }
 }
