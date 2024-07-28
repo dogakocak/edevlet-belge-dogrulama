@@ -1,2 +1,2 @@
 # edevlet-belge-dogrulama
-Bu proje e devlet üzerinden oluşturulan öğrenci belgesinin doğrulanmasını sağlar.
+Bu proje e devlet üzerinden oluşturulan belgelerin TC kimlik ve Barkod no aracılığı ile doğrulanmasını sağlar.
