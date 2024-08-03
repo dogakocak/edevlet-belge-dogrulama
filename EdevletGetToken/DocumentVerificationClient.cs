@@ -62,11 +62,11 @@ namespace EdevletGetToken
             }
         }
 
-        public async Task<bool> SendTcKimlikFormAsync(string tcKimlik, string barkod, string token)
+        public async Task<bool> SendTcIdentityFormAsync(string tcKimlik, string barkod, string token)
         {
             try
             {
-                if (!ValidationUtils.IsValidTcKimlikNo(tcKimlik))
+                if (!ValidationUtils.IsValidTurkishIdentityNo(tcKimlik))
                 {
                     return false;
                 }
@@ -90,7 +90,7 @@ namespace EdevletGetToken
             }
         }
 
-        public async Task<bool> SendOnayFormAsync(string token)
+        public async Task<bool> SendConfirmationFormAsync(string token)
         {
             try
             {

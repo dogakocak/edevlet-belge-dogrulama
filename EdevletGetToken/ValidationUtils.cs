@@ -10,7 +10,7 @@ namespace EdevletGetToken
 
     public class ValidationUtils
     {
-        public static bool IsValidTcKimlikNo(string tcKimlikNo)
+        public static bool IsValidTurkishIdentityNo(string tcKimlikNo)
         {
             return Regex.IsMatch(tcKimlikNo, @"^[1-9]\d{9}[02468]$");
         }
