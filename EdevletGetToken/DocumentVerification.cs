@@ -1,197 +1,78 @@
-﻿using iText.Kernel.Pdf;
-using iText.Kernel.Pdf.Canvas.Parser;
-using iText.Kernel.Pdf.Canvas.Parser.Listener;
-using System.Text.RegularExpressions;
+﻿using EdevletGetToken;
 
 public class DocumentVerification
 {
-    private readonly string endpoint = "https://www.turkiye.gov.tr";
-    private readonly HttpClient client;
+    private readonly DocumentVerificationClient client;
 
     public DocumentVerification()
     {
-        client = new HttpClient
-        {
-            BaseAddress = new Uri(endpoint)
-        };
-        client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36");
+        client = new DocumentVerificationClient();
     }
 
-    public async Task<string> GetTokenAsync()
+    public async Task<string> GetPdfTextAsync(string barkod, string tcKimlik)
     {
-        try
-        {
-            var response = await client.GetAsync("/belge-dogrulama");
-            response.EnsureSuccessStatusCode();
+        var token = await client.GetTokenAsync();
+        if (string.IsNullOrEmpty(token)) return null;
 
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var token = ExtractToken(responseBody);
+        var isFormSent = await client.SendFormAsync(token, barkod);
+        if (!isFormSent) return null;
 
-            return !string.IsNullOrEmpty(token) ? token : throw new Exception("Token alınamadı");
-        }
-        catch (HttpRequestException e)
+        var isTcKimlikFormSent = await client.SendTcKimlikFormAsync(tcKimlik, barkod, token);
+        if (!isTcKimlikFormSent) return null;
+
+        var isOnayFormSent = await client.SendOnayFormAsync(token);
+        if (!isOnayFormSent) return null;
+
+        var pdfBytes = await client.GetPdfAsync(token);
+        if (pdfBytes == null) return null;
+
+        var pdfText = PdfProcessor.ExtractTextFromPdf(pdfBytes);
+
+        // PDF içeriğini doğrula
+        bool isValid = PdfProcessor.ValidatePdf(pdfText);
+
+        if (!isValid)
         {
-            Console.WriteLine($"Bağlantı hatası: {e.Message}");
+            Console.WriteLine("PDF doğrulaması başarısız.");
             return null;
         }
+
+        return pdfText;
     }
 
-    public async Task<bool> SendFormAsync(string token, string barkod)
+    public void WriteInformations(string pdfText)
     {
-        try
+        string adiSoyadi = TextExtractor.ExtractNameSurname(pdfText);
+        string university = TextExtractor.ExtractUniversity(pdfText);
+        string faculty = TextExtractor.ExtractFaculty(pdfText);
+        string department = TextExtractor.ExtractDepartment(pdfText);
+
+        if (string.IsNullOrEmpty(adiSoyadi))
         {
-            string url = "/belge-dogrulama?submit";
-            var formData = new MultipartFormDataContent
-            {
-                { new StringContent(barkod), "sorgulananBarkod" },
-                { new StringContent(token), "token" }
-            };
-            var response = await client.PostAsync(url, formData);
-            response.EnsureSuccessStatusCode();
-            var responseBody = await response.Content.ReadAsStringAsync();
-
-            return responseBody.Contains("/belge-dogrulama?islem=dogrulama&submit");
+            Console.WriteLine("Adı / Soyadı bulunamadı.");
+            return;
         }
-        catch (HttpRequestException e)
+
+        if (string.IsNullOrEmpty(university))
         {
-            Console.WriteLine($"Bağlantı hatası: {e.Message}");
-            return false;
+            Console.WriteLine("Üniversite bilgisi bulunamadı.");
+            return;
         }
-    }
 
-    public async Task<bool> SendTcKimlikFormAsync(string tcKimlik, string barkod, string token)
-    {
-        try
+        if (string.IsNullOrEmpty(faculty))
         {
-            if (!IsValidTcKimlikNo(tcKimlik))
-            {
-                return false;
-            }
-
-            string url = $"/belge-dogrulama?islem=dogrulama&submit&barkod={barkod}";
-            var formData = new MultipartFormDataContent
-            {
-                { new StringContent(tcKimlik), "ikinciAlan" },
-                { new StringContent(token), "token" }
-            };
-            var response = await client.PostAsync(url, formData);
-            response.EnsureSuccessStatusCode();
-            var responseBody = await response.Content.ReadAsStringAsync();
-
-            return !responseBody.Contains("fieldError");
+            Console.WriteLine("Fakülte bilgisi bulunamadı.");
+            return;
         }
-        catch (HttpRequestException e)
+        if (string.IsNullOrEmpty(department))
         {
-            Console.WriteLine($"Bağlantı hatası: {e.Message}");
-            return false;
+            Console.WriteLine("Bölüm bilgisi bulunamadı.");
+            return;
         }
+
+        Console.WriteLine($"Adı / Soyadı: {adiSoyadi}");
+        Console.WriteLine($"Üniversite: {university}");
+        Console.WriteLine($"Fakülte: {faculty}");
+        Console.WriteLine($"Bölüm: {department}");
     }
-
-    public async Task<bool> SendOnayFormAsync(string token)
-    {
-        try
-        {
-
-            string url = $"/belge-dogrulama?islem=onay&submit";
-            var formData = new MultipartFormDataContent
-            {
-                { new StringContent("1"), "chkOnay" },
-                { new StringContent(token), "token" }
-            };
-            var response = await client.PostAsync(url, formData);
-            response.EnsureSuccessStatusCode();
-            var responseBody = await response.Content.ReadAsStringAsync();
-
-            return responseBody.Contains("/belge-dogrulama?islem=dogrulama") ? false : true;
-        }
-        catch (HttpRequestException e)
-        {
-            Console.WriteLine($"Bağlantı hatası: {e.Message}");
-            return false;
-        }
-    }
-
-    public async Task<bool> GetPdfUrl(string token)
-    {
-        try
-        {
-            string url = $"/belge-dogrulama?belge=goster&goster=1&display=display";
-            byte[] pdfBytes = await client.GetByteArrayAsync(url);
-
-            // PDF içeriğini stringe çevir
-            string pdfText = ExtractTextFromPdf(pdfBytes);
-
-            // TC kimlik bilgisini regex ile bul ve ekrana yazdır
-            string tcKimlik = ExtractTcKimlikNo(pdfText);
-            if (!string.IsNullOrEmpty(tcKimlik))
-            {
-                Console.WriteLine($"TC Kimlik No: {tcKimlik}");
-            }
-            else
-            {
-                Console.WriteLine("TC Kimlik No bulunamadı.");
-            }
-
-            string adiSoyadi = ExtractAdiSoyadi(pdfText);
-            if (!string.IsNullOrEmpty(adiSoyadi))
-            {
-                Console.WriteLine($"Adı / Soyadı: {adiSoyadi}");
-            }
-            else
-            {
-                Console.WriteLine("Adı / Soyadı bulunamadı.");
-            }
-
-            return pdfText.Contains("/belge-dogrulama?islem=dogrulama") ? false : true;
-        }
-        catch (HttpRequestException e)
-        {
-            Console.WriteLine($"Bağlantı hatası: {e.Message}");
-            return false;
-        }
-    }
-
-    private string ExtractTextFromPdf(byte[] pdfBytes)
-    {
-        using (var pdfStream = new System.IO.MemoryStream(pdfBytes))
-        {
-            using (var pdfReader = new PdfReader(pdfStream))
-            {
-                using (var pdfDocument = new PdfDocument(pdfReader))
-                {
-                    var strategy = new SimpleTextExtractionStrategy();
-                    var pdfText = PdfTextExtractor.GetTextFromPage(pdfDocument.GetPage(1), strategy);
-                    return pdfText;
-                }
-            }
-        }
-    }
-
-    private string ExtractTcKimlikNo(string text)
-    {
-        // TC kimlik no için basit bir regex örneği: 11 haneli sadece rakamlardan oluşan
-        var regex = new Regex(@"\b\d{11}\b");
-        var match = regex.Match(text);
-        return match.Success ? match.Value : null;
-    }
-
-    private string ExtractAdiSoyadi(string text)
-    {
-        // Adı / Soyadı kısmı için regex
-        var regex = new Regex(@"Adı / Soyadı\s*(.*)\s*Anne Adı");
-        var match = regex.Match(text);
-        return match.Success ? match.Groups[1].Value.Trim() : null;
-    }
-
-    private string ExtractToken(string html)
-    {
-        var match = Regex.Match(html, @"data-token=""(.+?)""");
-        return match.Success ? match.Groups[1].Value : null;
-    }
-
-    private bool IsValidTcKimlikNo(string tcKimlikNo)
-    {
-        return Regex.IsMatch(tcKimlikNo, @"^[1-9]\d{9}[02468]$");
-    }
-
 }
