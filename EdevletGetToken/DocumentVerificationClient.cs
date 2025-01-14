@@ -53,6 +53,8 @@ namespace EdevletGetToken
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
 
+                // Yeni tokeni return et
+
                 return responseBody.Contains("/belge-dogrulama?islem=dogrulama&submit");
             }
             catch (HttpRequestException e)
@@ -71,15 +73,18 @@ namespace EdevletGetToken
                     return false;
                 }
 
-                string url = $"/belge-dogrulama?islem=dogrulama&submit&barkod={barkod}";
+                string url = $"/belge-dogrulama?islem=dogrulama&submit";
                 var formData = new MultipartFormDataContent
             {
                 { new StringContent(tcKimlik), "ikinciAlan" },
-                { new StringContent(token), "token" }
+                { new StringContent(token), "token" },
+                { new StringContent("Devam Et"), "btn" }
             };
                 var response = await client.PostAsync(url, formData);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("----------------");
+                Console.WriteLine(responseBody);
 
                 return !responseBody.Contains("fieldError");
             }

@@ -16,14 +16,17 @@ public class DocumentVerification
 
         var isFormSent = await client.SendFormAsync(token, barkod);
         if (!isFormSent) return null;
+        //Buraya kadar çalışıyor
 
-        var isTcKimlikFormSent = await client.SendTcIdentityFormAsync(tcKimlik, barkod, token);
+        //var yeniToken
+        //eskisi değil yeni tokeni gonder
+        var isTcKimlikFormSent = await client.SendTcIdentityFormAsync(tcKimlik, barkod, token); //Burası SendFormAsync'den gelen token olmalı
         if (!isTcKimlikFormSent) return null;
 
-        var isOnayFormSent = await client.SendConfirmationFormAsync(token);
+        var isOnayFormSent = await client.SendConfirmationFormAsync(token); //Burası SendTcIdentityFormAsync'den gelen token olmalı
         if (!isOnayFormSent) return null;
 
-        var pdfBytes = await client.GetPdfAsync(token);
+        var pdfBytes = await client.GetPdfAsync(token); //Burası SendConfirmationFormAsync'den gelen token olmalı
         if (pdfBytes == null) return null;
 
         var pdfText = PdfProcessor.ExtractTextFromPdf(pdfBytes);
