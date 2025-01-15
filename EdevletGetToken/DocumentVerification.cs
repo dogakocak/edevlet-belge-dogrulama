@@ -11,22 +11,24 @@ public class DocumentVerification
 
     public async Task<string> GetPdfTextAsync(string barkod, string tcKimlik)
     {
+        // İlk token alınır
         var token = await client.GetTokenAsync();
         if (string.IsNullOrEmpty(token)) return null;
 
-        var isFormSent = await client.SendFormAsync(token, barkod);
-        if (!isFormSent) return null;
-        //Buraya kadar çalışıyor
+        // Form gönderilir ve yeni token alınır
+        var formResult = await client.SendFormAsync(token, barkod);
+        if (!formResult.IsSuccess || string.IsNullOrEmpty(formResult.NewToken)) return null;
 
-        //var yeniToken
-        //eskisi değil yeni tokeni gonder
-        var isTcKimlikFormSent = await client.SendTcIdentityFormAsync(tcKimlik, barkod, token); //Burası SendFormAsync'den gelen token olmalı
-        if (!isTcKimlikFormSent) return null;
+        // TC Kimlik formu gönderilir ve yeni token alınır
+        var tcKimlikResult = await client.SendTcIdentityFormAsync(tcKimlik, barkod, formResult.NewToken);
+        if (!tcKimlikResult.IsSuccess || string.IsNullOrEmpty(tcKimlikResult.NewToken)) return null;
 
-        var isOnayFormSent = await client.SendConfirmationFormAsync(token); //Burası SendTcIdentityFormAsync'den gelen token olmalı
-        if (!isOnayFormSent) return null;
+        // Onay formu gönderilir ve yeni token alınır
+        var onayResult = await client.SendConfirmationFormAsync(tcKimlikResult.NewToken);
+        if (!onayResult.IsSuccess || string.IsNullOrEmpty(onayResult.NewToken)) return null;
 
-        var pdfBytes = await client.GetPdfAsync(token); //Burası SendConfirmationFormAsync'den gelen token olmalı
+        // Son token ile PDF alınır
+        var pdfBytes = await client.GetPdfAsync(onayResult.NewToken);
         if (pdfBytes == null) return null;
 
         var pdfText = PdfProcessor.ExtractTextFromPdf(pdfBytes);
@@ -45,6 +47,7 @@ public class DocumentVerification
 
     public void WriteInformations(string pdfText)
     {
+        // Bu metod aynı kalabilir çünkü token işlemleriyle ilgisi yok
         string adiSoyadi = TextExtractor.ExtractNameSurname(pdfText);
         string university = TextExtractor.ExtractUniversity(pdfText);
         string faculty = TextExtractor.ExtractFaculty(pdfText);

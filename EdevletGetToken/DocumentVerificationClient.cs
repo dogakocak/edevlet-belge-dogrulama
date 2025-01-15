@@ -1,11 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace EdevletGetToken
 {
+    public class ApiResult
+    {
+        public bool IsSuccess { get; set; }
+        public string NewToken { get; set; }
+
+        public ApiResult(bool isSuccess, string newToken)
+        {
+            IsSuccess = isSuccess;
+            NewToken = newToken;
+        }
+    }
+
     public class DocumentVerificationClient
     {
         private readonly string endpoint = "https://www.turkiye.gov.tr";
@@ -17,10 +27,10 @@ namespace EdevletGetToken
             {
                 BaseAddress = new Uri(endpoint)
             };
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
         }
 
-        public async Task<string> GetTokenAsync()
+        public async Task<string?> GetTokenAsync()
         {
             try
             {
@@ -29,8 +39,7 @@ namespace EdevletGetToken
 
                 var responseBody = await response.Content.ReadAsStringAsync();
                 var token = TextExtractor.ExtractToken(responseBody);
-
-                return !string.IsNullOrEmpty(token) ? token : throw new Exception("Token alınamadı");
+                return token ?? null;
             }
             catch (HttpRequestException e)
             {
@@ -39,83 +48,90 @@ namespace EdevletGetToken
             }
         }
 
-        public async Task<bool> SendFormAsync(string token, string barkod)
+        public async Task<ApiResult> SendFormAsync(string? token, string? barkod)
         {
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(barkod))
+                return new ApiResult(false, null);
+
             try
             {
                 string url = "/belge-dogrulama?submit";
                 var formData = new MultipartFormDataContent
-            {
-                { new StringContent(barkod), "sorgulananBarkod" },
-                { new StringContent(token), "token" }
-            };
+                {
+                    { new StringContent(barkod), "sorgulananBarkod" },
+                    { new StringContent(token), "token" }
+                };
                 var response = await client.PostAsync(url, formData);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
 
-                // Yeni tokeni return et
-
-                return responseBody.Contains("/belge-dogrulama?islem=dogrulama&submit");
+                var newToken = TextExtractor.ExtractToken(responseBody);
+                var isSuccess = responseBody.Contains("/belge-dogrulama?islem=dogrulama&submit");
+                
+                return new ApiResult(isSuccess, newToken);
             }
             catch (HttpRequestException e)
             {
                 Console.WriteLine($"Bağlantı hatası: {e.Message}");
-                return false;
+                return new ApiResult(false, null);
             }
         }
 
-        public async Task<bool> SendTcIdentityFormAsync(string tcKimlik, string barkod, string token)
+        public async Task<ApiResult> SendTcIdentityFormAsync(string tcKimlik, string barkod, string token)
         {
             try
             {
                 if (!ValidationUtils.IsValidTurkishIdentityNo(tcKimlik))
                 {
-                    return false;
+                    return new ApiResult(false, null);
                 }
 
                 string url = $"/belge-dogrulama?islem=dogrulama&submit";
                 var formData = new MultipartFormDataContent
-            {
-                { new StringContent(tcKimlik), "ikinciAlan" },
-                { new StringContent(token), "token" },
-                { new StringContent("Devam Et"), "btn" }
-            };
+                {
+                    { new StringContent(tcKimlik), "ikinciAlan" },
+                    { new StringContent(token), "token" },
+                    { new StringContent("Devam Et"), "btn" }
+                };
                 var response = await client.PostAsync(url, formData);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
-                Console.WriteLine("----------------");
-                Console.WriteLine(responseBody);
 
-                return !responseBody.Contains("fieldError");
+                var newToken = TextExtractor.ExtractToken(responseBody);
+                var isSuccess = !responseBody.Contains("fieldError");
+                
+                return new ApiResult(isSuccess, newToken);
             }
             catch (HttpRequestException e)
             {
                 Console.WriteLine($"Bağlantı hatası: {e.Message}");
-                return false;
+                return new ApiResult(false, null);
             }
         }
 
-        public async Task<bool> SendConfirmationFormAsync(string token)
+        public async Task<ApiResult> SendConfirmationFormAsync(string token)
         {
             try
             {
-
                 string url = $"/belge-dogrulama?islem=onay&submit";
                 var formData = new MultipartFormDataContent
-            {
-                { new StringContent("1"), "chkOnay" },
-                { new StringContent(token), "token" }
-            };
+                {
+                    { new StringContent("1"), "chkOnay" },
+                    { new StringContent(token), "token" }
+                };
                 var response = await client.PostAsync(url, formData);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadAsStringAsync();
 
-                return responseBody.Contains("/belge-dogrulama?islem=dogrulama") ? false : true;
+                var newToken = TextExtractor.ExtractToken(responseBody);
+                var isSuccess = !responseBody.Contains("/belge-dogrulama?islem=dogrulama");
+                
+                return new ApiResult(isSuccess, newToken);
             }
             catch (HttpRequestException e)
             {
                 Console.WriteLine($"Bağlantı hatası: {e.Message}");
-                return false;
+                return new ApiResult(false, null);
             }
         }
 

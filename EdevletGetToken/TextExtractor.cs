@@ -16,17 +16,49 @@ namespace EdevletGetToken
             return ExtractInformation(text, @"Adı / Soyadı\s*(.*)\s*Anne Adı");
         }
 
-        public static string ExtractFaculty(string text)
-        {
-            // Fakülte bilgisi için regex
-            return ExtractInformation(text, @"ÜNİVERSİTESİ/(.*?FAKÜLTESİ)");
-        }
+       public static string ExtractFaculty(string text)
+{
+    // Üniversite ve Fakülte arasında "/" olmayabilir, boşluk olabilir
+    var pattern1 = @"ÜNİVERSİTESİ\s+(.*?FAKÜLTESİ)";
+    
+    // Veya direkt "Fakültesi" kelimesini içeren kısmı alabiliriz
+    var pattern2 = @"(.*?FAKÜLTESİ)";
+    
+    // İlk pattern'i dene
+    var result = ExtractInformation(text, pattern1);
+    
+    // Bulunamazsa ikinci pattern'i dene
+    if (string.IsNullOrEmpty(result))
+    {
+        result = ExtractInformation(text, pattern2);
+    }
+    
+    return result;
+}
 
-        public static string ExtractDepartment(string text)
+       public static string ExtractDepartment(string text)
+{
+    // Birkaç farklı pattern deneyelim
+    var patterns = new[]
+    {
+        @"Program\s.*?\/.*?\/([^\/]*?BÖLÜMÜ)",         // Mevcut pattern
+        @"BÖLÜMÜ\s*:\s*(.*?(?:BÖLÜMÜ|$))",            // "BÖLÜMÜ:" formatı için
+        @"FAKÜLTESİ\s*(.*?BÖLÜMÜ)",                   // Fakülteden sonra gelen bölüm
+        @"(?:Program|Bölüm)\s*:?\s*(.*?BÖLÜMÜ)",      // Program/Bölüm ile başlayan
+        @"([^\/\n]*?BÖLÜMÜ)"                          // Genel BÖLÜMÜ içeren kısım
+    };
+
+    foreach (var pattern in patterns)
+    {
+        var result = ExtractInformation(text, pattern)?.Trim();
+        if (!string.IsNullOrEmpty(result))
         {
-            // Bölüm bilgisi için regex
-            return ExtractInformation(text, @"Program\s.*?\/.*?\/([^\/]*?BÖLÜMÜ)");
+            return result;
         }
+    }
+
+    return null;
+}
 
         public static string ExtractUniversity(string text)
         {
